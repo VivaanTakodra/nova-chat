@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nova • AI Chat</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    
+    <style>
+        body { font-family: 'Inter', system_ui, sans-serif; }
+        .title-font { font-family: 'Space Grotesk', sans-serif; }
+        .chat-container { height: 100vh; display: flex; flex-direction: column; }
+        .messages { flex: 1; overflow-y: auto; padding: 24px; }
+        .bubble { padding: 14px 18px; border-radius: 20px; }
+        .user-bubble { background: rgb(59 130 246); color: white; border-bottom-right-radius: 4px; }
+        .bot-bubble { background: #1f2937; border-bottom-left-radius: 4px; }
+    </style>
+</head>
+<body class="bg-gray-950 text-gray-100">
+    <div class="chat-container max-w-4xl mx-auto border-x border-gray-800">
+        <header class="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center text-2xl font-bold">N</div>
+                <div>
+                    <h1 class="title-font text-2xl font-semibold">Nova</h1>
+                    <p class="text-emerald-400 text-xs">Groq • Connected</p>
+                </div>
+            </div>
+            <button onclick="toggleSettings()" class="px-4 py-2 hover:bg-gray-800 rounded-xl flex items-center gap-2 text-sm">
+                <i class="fa-solid fa-key"></i> Settings
+            </button>
+        </header>
+
+        <div id="messages" class="messages bg-gray-950"></div>
+
+        <div class="p-6 bg-gray-900 border-t border-gray-800">
+            <form id="chat-form" class="flex gap-3">
+                <input type="text" id="user-input" 
+                    class="flex-1 bg-gray-800 border border-gray-700 rounded-3xl px-6 py-4 focus:outline-none focus:border-blue-500"
+                    placeholder="Ask me anything...">
+                <button type="submit" class="w-14 h-14 bg-blue-600 hover:bg-blue-500 rounded-3xl flex items-center justify-center">
+                    <i class="fa-solid fa-paper-plane"></i>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+        <div class="bg-gray-900 p-8 rounded-3xl w-full max-w-md">
+            <h2 class="text-xl font-semibold mb-4">API Settings</h2>
+            <label class="block text-sm mb-2">Provider</label>
+            <select id="provider" class="w-full bg-gray-800 border border-gray-700 rounded-2xl px-4 py-3 mb-4">
+                <option value="groq">Groq (Fast & Free)</option>
+                <option value="openai">OpenAI</option>
+            </select>
+
+            <label class="block text-sm mb-2">API Key</label>
+            <input type="password" id="api-key-input" value="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"
+                class="w-full bg-gray-800 border border-gray-700 rounded-2xl px-5 py-3 mb-6">
+            
+            <button onclick="saveSettings()" class="w-full bg-blue-600 hover:bg-blue-500 py-3 rounded-2xl font-medium">Save Changes</button>
+        </div>
+    </div>
+
+    <script>
+        const messagesContainer = document.getElementById('messages');
+        let apiKey = "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"; // Your key is hardcoded
+        let provider = "groq";
+
+        function addMessage(text, isUser) {
+            const div = document.createElement('div');
+            div.className = `flex ${isUser ? 'justify-end' : 'justify-start'} mb-6`;
+            if (isUser) {
+                div.innerHTML = `<div class="max-w-[75%]"><div class="bubble user-bubble">${text}</div></div>`;
+            } else {
+                div.innerHTML = `
+                    <div class="flex gap-3">
+                        <div class="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center font-bold">N</div>
+                        <div class="max-w-[75%] prose prose-invert"><div class="bubble bot-bubble">${text}</div></div>
+                    </div>`;
+            }
+            messagesContainer.appendChild(div);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        function showTyping() {
+            const typing = document.createElement('div');
+            typing.id = 'typing';
+            typing.innerHTML = `
+                <div class="flex gap-3">
+                    <div class="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center font-bold">N</div>
+                    <div class="bubble bot-bubble">Thinking<span class="animate-pulse">...</span></div>
+                </div>`;
+            messagesContainer.appendChild(typing);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            return typing;
+        }
+
+        async function sendMessage(message) {
+            const typing = showTyping();
+
+            try {
+                const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${apiKey}`
+                    },
+                    body: JSON.stringify({
+                        model: "llama-3.3-70b-versatile",
+                        messages: [{ role: "user", content: message }],
+                        temperature: 0.7,
+                        max_tokens: 1024
+                    })
+                });
+
+                if (!res.ok) throw new Error("Request failed");
+
+                const data = await res.json();
+                typing.remove();
+                addMessage(marked.parse(data.choices[0].message.content), false);
+
+            } catch (err) {
+                typing.remove();
+                addMessage(`<span class="text-red-400">Error: ${err.message}</span>`, false);
+            }
+        }
+
+        function saveSettings() {
+            apiKey = document.getElementById('api-key-input').value.trim();
+            provider = document.getElementById('provider').value;
+            alert("Settings saved!");
+            toggleSettings();
+        }
+
+        function toggleSettings() {
+            document.getElementById('settings-modal').classList.toggle('hidden');
+        }
+
+        // Form Submit
+        document.getElementById('chat-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const input = document.getElementById('user-input');
+            const msg = input.value.trim();
+            if (!msg) return;
+
+            addMessage(msg, true);
+            input.value = '';
+            sendMessage(msg);
+        });
+
+        // Welcome Message
+        addMessage("Hello! I'm Nova.<br>I'm now connected with your Groq API key.<br>Ask me anything!", false);
+    </script>
+</body>
+</html>s
